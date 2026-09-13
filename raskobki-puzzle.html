@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Раскобки — своя головоломка</title>
+<style>
+  :root {
+    --bg: #f4efe5;
+    --ink: #2b2620;
+    --bracket: #b6472e;
+    --bracket-ready: #1f7a4d;
+    --solved: #2b2620;
+    --card: #fffaf0;
+    --border: #d9cdb8;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: Georgia, 'Times New Roman', serif;
+    display: flex;
+    justify-content: center;
+    padding: 40px 16px;
+  }
+  .wrap { max-width: 720px; width: 100%; }
+  h1 { font-size: 1.4rem; margin-bottom: 4px; }
+  .sub { color: #77706a; margin-bottom: 24px; font-size: 0.95rem; }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 28px 26px;
+    font-size: 1.25rem;
+    line-height: 2;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+  }
+
+  .bracket {
+    color: var(--bracket);
+    cursor: default;
+    border-bottom: 1px dashed var(--bracket);
+    padding: 0 2px;
+  }
+  .bracket.ready {
+    color: var(--bracket-ready);
+    cursor: pointer;
+    border-bottom: 1px solid var(--bracket-ready);
+  }
+  .bracket.ready:hover { background: rgba(31,122,77,0.08); }
+  .bracket.active {
+    background: rgba(31,122,77,0.18);
+    border-radius: 4px;
+  }
+  .solved-word {
+    color: var(--solved);
+    font-weight: 600;
+    border-bottom: 1px solid var(--solved);
+  }
+
+  .panel {
+    margin-top: 22px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+  }
+  .clue-line { font-size: 1.05rem; margin-bottom: 10px; min-height: 1.4em; }
+  .clue-line b { color: var(--bracket-ready); }
+  .row { display: flex; gap: 8px; }
+  input[type=text] {
+    flex: 1;
+    padding: 10px 12px;
+    font-size: 1rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-family: inherit;
+  }
+  button {
+    padding: 10px 18px;
+    font-size: 1rem;
+    border: none;
+    border-radius: 6px;
+    background: var(--bracket-ready);
+    color: white;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  button:disabled { background: #b7b0a4; cursor: not-allowed; }
+
+  .shake { animation: shake 0.3s; }
+  @keyframes shake {
+    0%,100% { transform: translateX(0); }
+    25% { transform: translateX(-6px); }
+    75% { transform: translateX(6px); }
+  }
+
+  .status { margin-top: 10px; font-size: 0.9rem; color: #77706a; }
+  .win {
+    margin-top: 18px;
+    padding: 14px 18px;
+    background: #e8f4ec;
+    border: 1px solid #b7dcc3;
+    border-radius: 8px;
+    color: #1f7a4d;
+    font-weight: 600;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Раскопки текста</h1>
+  <div class="sub">Зелёные скобки готовы к разгадыванию. Просто вводите ответ — он сам найдёт нужную скобку.</div>
+
+  <div class="card" id="sentence"></div>
+
+  <div class="panel">
+    <div class="clue-line" id="clueLine">Введите ответ на любую зелёную скобку.</div>
+    <div class="row">
+      <input type="text" id="answerInput" placeholder="Ваш ответ..." autocomplete="off">
+      <button id="submitBtn">Проверить</button>
+    </div>
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="win" id="winBanner" style="display:none;">
+    ✅ Готово! Весь текст восстановлен.
+  </div>
+</div>
+
+<script>
+/* =====================================================================
+   ФОРМАТ ДАННЫХ — замените PUZZLE на свою головоломку.
+
+   Каждый узел (кроме корня) — это одна "скобка":
+     { clue: "текст подсказки, может содержать {0}, {1}... для вложенных скобок",
+       answer: "правильный ответ",
+       children: [ ...дочерние узлы того же вида... ] }
+
+   Корень — это сам загаданный текст:
+     { text: "текст с {0}, {1}... на месте скобок верхнего уровня",
+       children: [ ...узлы верхнего уровня... ] }
+
+   Скобка становится доступной для ввода ответа (зелёной), когда ВСЕ её
+   дочерние {i} уже разгаданы (или дочерних нет вовсе).
+   ===================================================================== */
+
+const PUZZLE = {
+  text: "{0} {1}, {2}{3}ую {4} от{5} ей - {6} {7}ерный {8}",
+  children: [
+    { // 0
+      clue: "__скрипка",
+      answer: "первая",
+      children: []
+    },
+    { // 1
+      clue: "с{0}ка в литературе",
+      answer: "ссылка",
+      children: [
+        { // 1.0
+          clue: "{0} коллежского асессора К{1}ёва",
+          answer: "нос",
+          children: [
+            { // 1.0.0
+              clue: "боевая и административно-хозяйственная {0}",
+              answer: "часть",
+              children: [
+                { clue: "наименьшее натуральное число", answer: "единица", children: [] } // 1.0.0.0
+              ]
+            },
+            { clue: "эллипс", answer: "овал", children: [] } // 1.0.1
+          ]
+        }
+      ]
+    },
+    { // 2
+      clue: "у него все еще нет имени",
+      answer: "кот",
+      children: []
+    },
+    { // 3
+      clue: "крик",
+      answer: "ор",
+      children: []
+    },
+    { // 4
+      clue: "__Таня",
+      answer: "Саша",
+      children: []
+    },
+    { // 5
+      clue: "в {0}{1}ом клубе 8",
+      answer: "правил",
+      children: [
+        { clue: "столкновение, часов", answer: "бой", children: [] },      // 5.0
+        { clue: "от___ий долг", answer: "цовск", children: [] }            // 5.1
+      ]
+    },
+    { // 6
+      clue: " _____ {0} бо{1}ды не {2}ит",
+      answer: "старый",
+      children: [
+        { // 6.0
+          clue: "{0} и его купают",
+          answer: "конь",
+          children: [
+            { clue: "красивый", answer: "красный", children: [] } // 6.0.0
+          ]
+        },
+        { clue: "война их", answer: "роз", children: [] },              // 6.1
+        { clue: "для мышек и кораблей", answer: "порт", children: [] }  // 6.2
+      ]
+    },
+    { // 7
+      clue: "спортивный инвентарь",
+      answer: "мат",
+      children: []
+    },
+    { // 8
+      clue: "натальная карта",
+      answer: "гороскоп",
+      children: []
+    }
+  ]
+};
+
+/* ===================== движок — трогать не обязательно ===================== */
+
+const solved = {};       // key(path) -> answer text
+let readyNodes = {};      // key(path) -> node, пересобирается при каждом render()
+
+function normalize(s) {
+  return s.trim().toLowerCase().replace(/ё/g, 'е');
+}
+
+function isReady(node, path) {
+  if (!node.children || node.children.length === 0) return true;
+  return node.children.every((c, i) => solved[[...path, i].join('.')] !== undefined);
+}
+
+function countAll(node) {
+  let n = node.children ? node.children.length : 0;
+  (node.children || []).forEach(c => n += countAll(c));
+  return n;
+}
+const TOTAL = countAll(PUZZLE);
+
+function buildFragment(node, path) {
+  const text = node.text !== undefined ? node.text : node.clue;
+  const frag = document.createDocumentFragment();
+  const parts = text.split(/(\{\d+\})/g);
+  parts.forEach(part => {
+    const m = part.match(/^\{(\d+)\}$/);
+    if (m) {
+      const i = parseInt(m[1], 10);
+      const child = node.children[i];
+      const childPath = [...path, i];
+      const key = childPath.join('.');
+      if (solved[key] !== undefined) {
+        const span = document.createElement('span');
+        span.className = 'solved-word';
+        span.textContent = solved[key];
+        frag.appendChild(span);
+      } else {
+        frag.appendChild(renderBracket(child, childPath));
+      }
+    } else if (part) {
+      frag.appendChild(document.createTextNode(part));
+    }
+  });
+  return frag;
+}
+
+function renderBracket(node, path) {
+  const key = path.join('.');
+  const ready = isReady(node, path);
+  if (ready) readyNodes[key] = node;
+  const span = document.createElement('span');
+  span.className = 'bracket' + (ready ? ' ready' : '');
+  span.dataset.key = key;
+  span.appendChild(document.createTextNode('['));
+  span.appendChild(buildFragment(node, path));
+  span.appendChild(document.createTextNode(']'));
+  if (ready) {
+    // клик — необязательное удобство: просто ставит курсор в поле ввода
+    span.addEventListener('click', () => document.getElementById('answerInput').focus());
+  }
+  return span;
+}
+
+function render() {
+  readyNodes = {};
+  const container = document.getElementById('sentence');
+  container.innerHTML = '';
+  container.appendChild(buildFragment(PUZZLE, []));
+
+  const solvedCount = Object.keys(solved).length;
+  document.getElementById('status').textContent =
+    `Разгадано: ${solvedCount} / ${TOTAL} · доступно скобок: ${Object.keys(readyNodes).length}`;
+
+  if (solvedCount === TOTAL) {
+    document.getElementById('winBanner').style.display = 'block';
+    document.getElementById('answerInput').disabled = true;
+    document.getElementById('submitBtn').disabled = true;
+    document.getElementById('clueLine').textContent = 'Всё разгадано.';
+  }
+}
+
+function submitAnswer() {
+  const input = document.getElementById('answerInput');
+  const val = normalize(input.value);
+  if (!val) return;
+
+  let matchedKey = null;
+  for (const key in readyNodes) {
+    if (normalize(readyNodes[key].answer) === val) { matchedKey = key; break; }
+  }
+
+  if (matchedKey) {
+    solved[matchedKey] = readyNodes[matchedKey].answer;
+    input.value = '';
+    document.getElementById('clueLine').textContent = 'Верно! Продолжайте вводить ответы.';
+    render();
+    input.focus();
+  } else {
+    const card = document.getElementById('sentence');
+    card.classList.remove('shake');
+    void card.offsetWidth;
+    card.classList.add('shake');
+  }
+}
+
+document.getElementById('submitBtn').addEventListener('click', submitAnswer);
+document.getElementById('answerInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') submitAnswer();
+});
+
+render();
+</script>
+</body>
+</html>

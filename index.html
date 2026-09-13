@@ -98,6 +98,18 @@
   }
 
   .status { margin-top: 10px; font-size: 0.9rem; color: #77706a; }
+  .timer {
+    display: inline-block;
+    margin-bottom: 14px;
+    padding: 4px 12px;
+    background: var(--card, #fffaf0);
+    border: 1px solid var(--border, #d9cdb8);
+    border-radius: 20px;
+    font-variant-numeric: tabular-nums;
+    font-size: 0.95rem;
+    color: #77706a;
+  }
+  .timer.stopped { color: #1f7a4d; border-color: #b7dcc3; font-weight: 600; }
   .win {
     margin-top: 18px;
     padding: 14px 18px;
@@ -113,6 +125,7 @@
 <div class="wrap">
   <h1>Раскопки текста</h1>
   <div class="sub">Зелёные скобки готовы к разгадыванию. Просто вводите ответ — он сам найдёт нужную скобку.</div>
+  <div class="timer" id="timer">00:00</div>
 
   <div class="card" id="sentence"></div>
 
@@ -210,7 +223,7 @@ const PUZZLE = {
           ]
         },
         { clue: "война их", answer: "роз", children: [] },              // 6.1
-        { clue: "для мышек и шлюшек", answer: "порт", children: [] }  // 6.2
+        { clue: "для мышек и кораблей", answer: "порт", children: [] }  // 6.2
       ]
     },
     { // 7
@@ -230,6 +243,27 @@ const PUZZLE = {
 
 const solved = {};       // key(path) -> answer text
 let readyNodes = {};      // key(path) -> node, пересобирается при каждом render()
+const startTime = Date.now();
+let timerInterval = null;
+
+function formatTime(ms) {
+  const totalSec = Math.floor(ms / 1000);
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+}
+
+function startTimer() {
+  const el = document.getElementById('timer');
+  timerInterval = setInterval(() => {
+    el.textContent = formatTime(Date.now() - startTime);
+  }, 1000);
+}
+
+function stopTimer() {
+  clearInterval(timerInterval);
+  document.getElementById('timer').classList.add('stopped');
+}
 
 function normalize(s) {
   return s.trim().toLowerCase().replace(/ё/g, 'е');
@@ -301,10 +335,13 @@ function render() {
     `Разгадано: ${solvedCount} / ${TOTAL} · доступно скобок: ${Object.keys(readyNodes).length}`;
 
   if (solvedCount === TOTAL) {
+    document.getElementById('winBanner').innerHTML =
+      '✅ Готово! Весь текст восстановлен. Время: <b>' + formatTime(Date.now() - startTime) + '</b>';
     document.getElementById('winBanner').style.display = 'block';
     document.getElementById('answerInput').disabled = true;
     document.getElementById('submitBtn').disabled = true;
     document.getElementById('clueLine').textContent = 'Всё разгадано.';
+    stopTimer();
   }
 }
 
@@ -338,6 +375,7 @@ document.getElementById('answerInput').addEventListener('keydown', e => {
 });
 
 render();
+startTimer();
 </script>
 </body>
 </html>

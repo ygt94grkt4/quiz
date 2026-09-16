@@ -254,7 +254,7 @@ const PUZZLE = {
           ]
         },
         { clue: "война их", answer: "роз", children: [] },              // 6.1
-        { clue: "для мышек и шлюшек", answer: "порт", children: [] }  // 6.2
+        { clue: "для мышек и кораблей", answer: "порт", children: [] }  // 6.2
       ]
     },
     { // 7
@@ -276,6 +276,7 @@ const solved = {};       // key(path) -> answer text
 let readyNodes = {};      // key(path) -> node, пересобирается при каждом render()
 const startTime = Date.now();
 let timerInterval = null;
+let mistakes = 0;
 
 function formatTime(ms) {
   const totalSec = Math.floor(ms / 1000);
@@ -363,11 +364,11 @@ function render() {
 
   const solvedCount = Object.keys(solved).length;
   document.getElementById('status').textContent =
-    `Разгадано: ${solvedCount} / ${TOTAL} · доступно скобок: ${Object.keys(readyNodes).length}`;
+    `Разгадано: ${solvedCount} / ${TOTAL} · доступно скобок: ${Object.keys(readyNodes).length} · неверных ответов: ${mistakes}`;
 
   if (solvedCount === TOTAL) {
     document.getElementById('winBanner').innerHTML =
-      '✅ Готово! Весь текст восстановлен. Время: <b>' + formatTime(Date.now() - startTime) + '</b>';
+      '✅ Готово! Весь текст восстановлен. Время: <b>' + formatTime(Date.now() - startTime) + '</b> · Неверных ответов: <b>' + mistakes + '</b>';
     document.getElementById('winBanner').style.display = 'block';
     document.getElementById('answerInput').disabled = true;
     document.getElementById('submitBtn').disabled = true;
@@ -393,6 +394,8 @@ function submitAnswer() {
     render();
     input.focus();
   } else {
+    mistakes++;
+    render();
     const card = document.getElementById('sentence');
     card.classList.remove('shake');
     void card.offsetWidth;
